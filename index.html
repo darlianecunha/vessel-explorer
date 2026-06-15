@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vessel Explorer · IMO Fleet Dataset</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1622; --panel:#13212f; --panel2:#1b2c3d; --line:#283a4d;
+    --text:#e8eef4; --muted:#8aa0b4; --accent:#21a0a0; --accent2:#3b82f6;
+    --A:#16a34a; --B:#65a30d; --C:#ca8a04; --D:#ea580c; --E:#dc2626; --NA:#475569;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.45}
+  header{padding:28px 24px 18px;border-bottom:1px solid var(--line);
+    background:linear-gradient(120deg,#0b1622,#102536)}
+  h1{margin:0;font-size:22px;letter-spacing:.3px}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .wrap{max-width:1180px;margin:0 auto;padding:20px 24px 60px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .card .v{font-size:26px;font-weight:700}
+  .card .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0}
+  .chartbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .chartbox h3{margin:0 0 10px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+  .filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:10px;margin:8px 0 14px}
+  input,select{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+    border-radius:9px;padding:9px 11px;font-size:13px;width:100%}
+  input::placeholder{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{background:var(--panel2);color:var(--muted);font-weight:600;cursor:pointer;user-select:none;position:sticky;top:0}
+  th:hover{color:var(--text)}
+  tbody tr:hover{background:#172636}
+  td a{color:var(--accent2);text-decoration:none}
+  td a:hover{text-decoration:underline}
+  .grade{display:inline-block;width:24px;text-align:center;border-radius:6px;font-weight:700;color:#06121b;font-size:12px}
+  .gA{background:var(--A)}.gB{background:var(--B)}.gC{background:var(--C)}.gD{background:var(--D);color:#fff}.gE{background:var(--E);color:#fff}.gNA{background:var(--NA);color:#cfd8e3}
+  .tag{font-size:11px;color:var(--muted)}
+  .bar{display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px}
+  .count{color:var(--muted);font-size:13px}
+  .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:16px}
+  .pager button{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:8px;padding:7px 13px;cursor:pointer}
+  .pager button:disabled{opacity:.4;cursor:default}
+  footer{color:var(--muted);font-size:12px;border-top:1px solid var(--line);padding:18px 24px;text-align:center}
+  @media(max-width:820px){.charts{grid-template-columns:1fr}.filters{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>⚓ Vessel Explorer</h1>
+  <div class="sub">Fleet dataset enriched and classified from EU MRV 2024 emissions data · ship type, size, emissions efficiency and flag</div>
+</header>
+<div class="wrap">
+  <div class="cards" id="cards"></div>
+
+  <div class="charts">
+    <div class="chartbox"><h3>Ships by type</h3><canvas id="cType" height="180"></canvas></div>
+    <div class="chartbox"><h3>Emissions efficiency grade (A best – E worst)</h3><canvas id="cGrade" height="180"></canvas></div>
+  </div>
+
+  <div class="filters">
+    <input id="q" placeholder="Search by name or IMO number…" />
+    <select id="fType"></select>
+    <select id="fSize"></select>
+    <select id="fGrade"></select>
+    <select id="fFlag"></select>
+  </div>
+
+  <div class="bar">
+    <span class="count" id="count"></span>
+    <span class="tag">Click a column header to sort · click a vessel to view it on MarineTraffic</span>
+  </div>
+
+  <table>
+    <thead><tr>
+      <th data-k="imo">IMO</th>
+      <th data-k="name">Name</th>
+      <th data-k="ship_type">Type</th>
+      <th data-k="dwt">DWT</th>
+      <th data-k="dwt_size_class">Size class</th>
+      <th data-k="efficiency_grade">Grade</th>
+      <th data-k="flag_registry">Flag / Registry</th>
+      <th data-k="co2_total_t">CO₂ (t)</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="pager" id="pager"></div>
+</div>
+<footer>
+  Data: European Commission · EU MRV 2024 (Regulation EU 2015/757) + IMO-validated DWT.
+  Efficiency grade is a relative CO₂-intensity band within ship type, not the official IMO CII.
+</footer>
+
+<script>
+let DATA=[], view=[], page=0, perPage=50, sortK="dwt", sortDir=-1;
+const $=id=>document.getElementById(id);
+const fmt=n=>n==null?"—":Number(n).toLocaleString("en-GB");
+const gradeCls=g=>({A:"gA",B:"gB",C:"gC",D:"gD",E:"gE"}[g]||"gNA");
+
+function uniq(k){return [...new Set(DATA.map(d=>d[k]).filter(Boolean))].sort();}
+function fillSelect(id,k,label){
+  const s=$(id); s.innerHTML=`<option value="">${label}</option>`+
+    uniq(k).map(v=>`<option>${v}</option>`).join("");
+}
+
+function applyFilters(){
+  const q=$("q").value.trim().toLowerCase();
+  const t=$("fType").value, sz=$("fSize").value, g=$("fGrade").value, fl=$("fFlag").value;
+  view=DATA.filter(d=>{
+    if(t&&d.ship_type!==t)return false;
+    if(sz&&d.dwt_size_class!==sz)return false;
+    if(g&&d.efficiency_grade!==g)return false;
+    if(fl&&d.flag_registry!==fl)return false;
+    if(q&&!(String(d.imo).includes(q)||(d.name||"").toLowerCase().includes(q)))return false;
+    return true;
+  });
+  sortView(); page=0; render();
+}
+function sortView(){
+  view.sort((a,b)=>{
+    let x=a[sortK],y=b[sortK];
+    if(x==null)return 1; if(y==null)return -1;
+    if(typeof x==="number")return (x-y)*sortDir;
+    return String(x).localeCompare(String(y))*sortDir;
+  });
+}
+function render(){
+  $("count").textContent=`${fmt(view.length)} vessels`;
+  const start=page*perPage, slice=view.slice(start,start+perPage);
+  $("rows").innerHTML=slice.map(d=>`<tr>
+    <td><a href="https://www.marinetraffic.com/en/ais/details/ships/imo:${d.imo}" target="_blank" rel="noopener">${d.imo}</a></td>
+    <td>${d.name||"—"}</td>
+    <td>${d.ship_type||"—"}</td>
+    <td>${fmt(d.dwt)}</td>
+    <td>${d.dwt_size_class||"—"}</td>
+    <td><span class="grade ${gradeCls(d.efficiency_grade)}">${d.efficiency_grade==="N/A"?"–":d.efficiency_grade}</span></td>
+    <td>${d.flag_registry||"—"}</td>
+    <td>${fmt(d.co2_total_t)}</td>
+  </tr>`).join("");
+  const pages=Math.max(1,Math.ceil(view.length/perPage));
+  $("pager").innerHTML=`<button ${page<=0?"disabled":""} id="prev">‹ Prev</button>
+    <span class="count">Page ${page+1} of ${pages}</span>
+    <button ${page>=pages-1?"disabled":""} id="next">Next ›</button>`;
+  const p=$("prev"),n=$("next");
+  if(p)p.onclick=()=>{page--;render();};
+  if(n)n.onclick=()=>{page++;render();};
+}
+
+function buildCards(){
+  const total=DATA.length;
+  const mrv=DATA.filter(d=>d.in_mrv).length;
+  const graded=DATA.filter(d=>d.efficiency_grade!=="N/A").length;
+  const types=uniq("ship_type").length;
+  const co2=DATA.reduce((s,d)=>s+(d.co2_total_t||0),0);
+  const cards=[
+    [fmt(total),"Vessels"],
+    [fmt(mrv),"With MRV attributes"],
+    [fmt(graded),"With efficiency grade"],
+    [fmt(types),"Ship types"],
+    [(co2/1e6).toFixed(2)+" Mt","Total CO₂ (reported)"]
+  ];
+  $("cards").innerHTML=cards.map(c=>`<div class="card"><div class="v">${c[0]}</div><div class="l">${c[1]}</div></div>`).join("");
+}
+
+function charts(){
+  const byType={}; DATA.forEach(d=>byType[d.ship_type]=(byType[d.ship_type]||0)+1);
+  const te=Object.entries(byType).sort((a,b)=>b[1]-a[1]);
+  new Chart($("cType"),{type:"bar",data:{labels:te.map(e=>e[0]),
+    datasets:[{data:te.map(e=>e[1]),backgroundColor:"#21a0a0"}]},
+    options:{indexAxis:"y",plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#8aa0b4"},grid:{color:"#24384a"}},y:{ticks:{color:"#cfd8e3"},grid:{display:false}}}}});
+  const order=["A","B","C","D","E","N/A"], col={A:"#16a34a",B:"#65a30d",C:"#ca8a04",D:"#ea580c",E:"#dc2626","N/A":"#475569"};
+  const byG={}; DATA.forEach(d=>byG[d.efficiency_grade]=(byG[d.efficiency_grade]||0)+1);
+  new Chart($("cGrade"),{type:"bar",data:{labels:order,
+    datasets:[{data:order.map(g=>byG[g]||0),backgroundColor:order.map(g=>col[g])}]},
+    options:{plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:"#cfd8e3"},grid:{display:false}},y:{ticks:{color:"#8aa0b4"},grid:{color:"#24384a"}}}}});
+}
+
+fetch("data.json").then(r=>r.json()).then(d=>{
+  DATA=d;
+  buildCards(); charts();
+  fillSelect("fType","ship_type","All types");
+  fillSelect("fSize","dwt_size_class","All sizes");
+  fillSelect("fGrade","efficiency_grade","All grades");
+  fillSelect("fFlag","flag_registry","All flags");
+  ["q","fType","fSize","fGrade","fFlag"].forEach(id=>{
+    $(id).addEventListener("input",applyFilters);
+  });
+  document.querySelectorAll("th").forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k; if(sortK===k)sortDir*=-1;else{sortK=k;sortDir=1;}
+    sortView();render();
+  });
+  applyFilters();
+});
+</script>
+</body>
+</html>
