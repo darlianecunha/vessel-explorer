@@ -37,7 +37,7 @@ Or import the GitHub repo at vercel.com → New Project → Framework preset: **
 ## Files
 
 - `index.html` — single-file explorer (Chart.js from CDN)
-- `data.json` — dataset (2,906 vessels)
+- `data.json` — dataset (1,570 vessels)
 - `vercel.json` — static config (clean URLs, caching)
 
 ## Data source & licence
