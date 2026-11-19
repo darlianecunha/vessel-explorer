@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Vessel Explorer: 11,298 ships with verified EU MRV 2025 CO2 emissions and validated deadweight, by ship type, size class, efficiency grade and port of registry. Part of DecarbPort." />
 <title>Vessel Explorer · EU MRV 2025 fleet</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -59,7 +60,7 @@
 <header>
   <div class="hdr"><div>
   <h1>⚓ Vessel Explorer</h1>
-  <div class="sub">11,298 ships with verified EU MRV 2025 emissions and validated deadweight · ship type, size class, CO₂ intensity and flag. Indicators and charts follow the filters.</div>
+  <div class="sub">11,298 ships with verified EU MRV 2025 emissions and validated deadweight · ship type, size class, CO₂ intensity and port of registry. Indicators and charts follow the filters.</div>
   </div><a href="https://www.decarbport.nl/">Part of DecarbPort →</a></div>
 </header>
 <div class="wrap">
@@ -83,6 +84,7 @@
     <span class="tag">Click a column header to sort · click a vessel to view it on MarineTraffic</span>
   </div>
 
+  <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
   <table>
     <thead><tr>
       <th data-k="imo">IMO</th>
@@ -91,12 +93,13 @@
       <th data-k="dwt">DWT</th>
       <th data-k="dwt_size_class">Size class</th>
       <th data-k="efficiency_grade" title="CO₂ per n mile, quintile within ship type: A best, E worst">Grade</th>
-      <th data-k="flag_registry">Flag / Registry</th>
+      <th data-k="flag_registry">Port of registry</th>
       <th data-k="co2_total_t">CO₂ (t)</th>
       <th data-k="co2_per_distance_kg_nm" title="Basis of the efficiency grade">CO₂ per n mile (kg)</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
+  </div>
   <div class="pager" id="pager"></div>
 </div>
 <footer>
@@ -197,7 +200,7 @@ fetch("data.json?v=2025-11-19").then(r=>r.json()).then(d=>{
   fillSelect("fType","ship_type","All types");
   fillSelect("fSize","dwt_size_class","All sizes");
   fillSelect("fGrade","efficiency_grade","All grades");
-  fillSelect("fFlag","flag_registry","All flags");
+  fillSelect("fFlag","flag_registry","All ports of registry");
   ["q","fType","fSize","fGrade","fFlag"].forEach(id=>{
     $(id).addEventListener("input",applyFilters);
   });
