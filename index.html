@@ -25,6 +25,10 @@
   .card .l{font-size:12px;color:var(--muted);margin-top:2px}
   .charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0}
   .chartbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .chartbox .ch{position:relative;height:300px}
+  .hdr{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  .hdr a{color:var(--accent2);font-size:13px;text-decoration:none;white-space:nowrap}
+  .dl{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:10px}
   .chartbox h3{margin:0 0 10px;font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
   .filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:10px;margin:8px 0 14px}
   input,select{background:var(--panel2);color:var(--text);border:1px solid var(--line);
@@ -53,15 +57,17 @@
 </head>
 <body>
 <header>
+  <div class="hdr"><div>
   <h1>⚓ Vessel Explorer</h1>
-  <div class="sub">11,298 ships with verified EU MRV 2025 emissions and validated deadweight · ship type, size class, efficiency grade and flag</div>
+  <div class="sub">11,298 ships with verified EU MRV 2025 emissions and validated deadweight · ship type, size class, CO₂ intensity and flag. Indicators and charts follow the filters.</div>
+  </div><a href="https://www.decarbport.nl/">Part of DecarbPort →</a></div>
 </header>
 <div class="wrap">
   <div class="cards" id="cards"></div>
 
   <div class="charts">
-    <div class="chartbox"><h3>Ships by type</h3><canvas id="cType" height="180"></canvas></div>
-    <div class="chartbox"><h3>Emissions efficiency grade (A best – E worst)</h3><canvas id="cGrade" height="180"></canvas></div>
+    <div class="chartbox"><h3>Ships by type</h3><div class="ch"><canvas id="cType" role="img" aria-label="Chart: ships by type"></canvas></div></div>
+    <div class="chartbox"><h3>Reported CO₂ by ship type (Mt)</h3><div class="ch"><canvas id="cGrade" role="img" aria-label="Chart: reported CO2 by ship type"></canvas></div></div>
   </div>
 
   <div class="filters">
@@ -73,7 +79,7 @@
   </div>
 
   <div class="bar">
-    <span class="count" id="count"></span>
+    <span><span class="count" id="count"></span><button class="dl" id="csv">Download CSV</button></span>
     <span class="tag">Click a column header to sort · click a vessel to view it on MarineTraffic</span>
   </div>
 
@@ -84,9 +90,10 @@
       <th data-k="ship_type">Type</th>
       <th data-k="dwt">DWT</th>
       <th data-k="dwt_size_class">Size class</th>
-      <th data-k="efficiency_grade">Grade</th>
+      <th data-k="efficiency_grade" title="CO₂ per n mile, quintile within ship type: A best, E worst">Grade</th>
       <th data-k="flag_registry">Flag / Registry</th>
       <th data-k="co2_total_t">CO₂ (t)</th>
+      <th data-k="co2_per_distance_kg_nm" title="Basis of the efficiency grade">CO₂ per n mile (kg)</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>
@@ -94,7 +101,7 @@
 </div>
 <footer>
   Data: European Commission · EU MRV 2025 reporting period (Regulation EU 2015/757), published July 2026 · DWT validated by IMO number.
-  Efficiency grade is a relative CO₂-intensity band within ship type, not the official IMO CII.
+  Efficiency grade: quintile of CO₂ per nautical mile within each ship type (A best, E worst). It is a relative band, not the official IMO CII.
   <br /><br />
   Developed by <strong>Darliane Cunha, PhD</strong> ·
   <a href="mailto:darlianerc@gmail.com" style="color:var(--accent2);text-decoration:none">darlianerc@gmail.com</a>
@@ -103,13 +110,16 @@
 <script>
 let DATA=[], view=[], page=0, perPage=50, sortK="dwt", sortDir=-1;
 const $=id=>document.getElementById(id);
-const fmt=n=>n==null?"—":Number(n).toLocaleString("en-GB");
+const fmt=(n,d=0)=>n==null?"—":Number(n).toLocaleString("en-GB",{maximumFractionDigits:d,minimumFractionDigits:d});
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const SIZES=["Small (<10k)","Handysize (10-35k)","Handymax/Supramax (35-60k)","Panamax (60-100k)","Large (100-200k)","Very Large (>=200k)"];
+let CH={};
 const gradeCls=g=>({A:"gA",B:"gB",C:"gC",D:"gD",E:"gE"}[g]||"gNA");
 
-function uniq(k){return [...new Set(DATA.map(d=>d[k]).filter(Boolean))].sort();}
+function uniq(k){const u=[...new Set(DATA.map(d=>d[k]).filter(Boolean))];return k==="dwt_size_class"?SIZES.filter(x=>u.includes(x)):u.sort();}
 function fillSelect(id,k,label){
   const s=$(id); s.innerHTML=`<option value="">${label}</option>`+
-    uniq(k).map(v=>`<option>${v}</option>`).join("");
+    uniq(k).map(v=>`<option>${esc(v)}</option>`).join("");
 }
 
 function applyFilters(){
@@ -123,7 +133,7 @@ function applyFilters(){
     if(q&&!(String(d.imo).includes(q)||(d.name||"").toLowerCase().includes(q)))return false;
     return true;
   });
-  sortView(); page=0; render();
+  sortView(); page=0; render(); buildCards(); charts();
 }
 function sortView(){
   view.sort((a,b)=>{
@@ -138,13 +148,14 @@ function render(){
   const start=page*perPage, slice=view.slice(start,start+perPage);
   $("rows").innerHTML=slice.map(d=>`<tr>
     <td><a href="https://www.marinetraffic.com/en/ais/details/ships/imo:${d.imo}" target="_blank" rel="noopener">${d.imo}</a></td>
-    <td>${d.name||"—"}</td>
-    <td>${d.ship_type||"—"}</td>
+    <td>${esc(d.name||"—")}</td>
+    <td>${esc(d.ship_type||"—")}</td>
     <td>${fmt(d.dwt)}</td>
     <td>${d.dwt_size_class||"—"}</td>
     <td><span class="grade ${gradeCls(d.efficiency_grade)}">${d.efficiency_grade==="N/A"?"–":d.efficiency_grade}</span></td>
-    <td>${d.flag_registry||"—"}</td>
+    <td>${esc(d.flag_registry||"—")}</td>
     <td>${fmt(d.co2_total_t)}</td>
+    <td>${fmt(d.co2_per_distance_kg_nm,1)}</td>
   </tr>`).join("");
   const pages=Math.max(1,Math.ceil(view.length/perPage));
   $("pager").innerHTML=`<button ${page<=0?"disabled":""} id="prev">‹ Prev</button>
@@ -156,39 +167,33 @@ function render(){
 }
 
 function buildCards(){
-  const total=DATA.length;
-  const mrv=DATA.filter(d=>d.in_mrv).length;
-  const graded=DATA.filter(d=>d.efficiency_grade!=="N/A").length;
-  const types=uniq("ship_type").length;
-  const co2=DATA.reduce((s,d)=>s+(d.co2_total_t||0),0);
-  const cards=[
-    [fmt(total),"Vessels"],
-    [fmt(mrv),"With MRV attributes"],
-    [fmt(graded),"With efficiency grade"],
-    [fmt(types),"Ship types"],
-    [(co2/1e6).toFixed(2)+" Mt","Total CO₂ (reported)"]
-  ];
+  const V=view, n=V.length, co2=V.reduce((s,d)=>s+(d.co2_total_t||0),0), dwt=V.reduce((s,d)=>s+(d.dwt||0),0);
+  const types=new Set(V.map(d=>d.ship_type)).size;
+  const cards=[[fmt(n),"Vessels"],[fmt(types),"Ship types"],[fmt(co2/1e6,2)+" Mt","Reported CO₂, 2025"],[fmt(dwt/1e6,1)+" Mt","Total deadweight"],[n?fmt(co2/n)+" t":"—","Mean CO₂ per ship"]];
   $("cards").innerHTML=cards.map(c=>`<div class="card"><div class="v">${c[0]}</div><div class="l">${c[1]}</div></div>`).join("");
 }
 
 function charts(){
-  const byType={}; DATA.forEach(d=>byType[d.ship_type]=(byType[d.ship_type]||0)+1);
-  const te=Object.entries(byType).sort((a,b)=>b[1]-a[1]);
-  new Chart($("cType"),{type:"bar",data:{labels:te.map(e=>e[0]),
-    datasets:[{data:te.map(e=>e[1]),backgroundColor:"#21a0a0"}]},
-    options:{indexAxis:"y",plugins:{legend:{display:false}},
-      scales:{x:{ticks:{color:"#8aa0b4"},grid:{color:"#24384a"}},y:{ticks:{color:"#cfd8e3"},grid:{display:false}}}}});
-  const order=["A","B","C","D","E","N/A"], col={A:"#16a34a",B:"#65a30d",C:"#ca8a04",D:"#ea580c",E:"#dc2626","N/A":"#475569"};
-  const byG={}; DATA.forEach(d=>byG[d.efficiency_grade]=(byG[d.efficiency_grade]||0)+1);
-  new Chart($("cGrade"),{type:"bar",data:{labels:order,
-    datasets:[{data:order.map(g=>byG[g]||0),backgroundColor:order.map(g=>col[g])}]},
-    options:{plugins:{legend:{display:false}},
-      scales:{x:{ticks:{color:"#cfd8e3"},grid:{display:false}},y:{ticks:{color:"#8aa0b4"},grid:{color:"#24384a"}}}}});
+  if(typeof Chart==="undefined")return;
+  const by={},co={}; view.forEach(d=>{by[d.ship_type]=(by[d.ship_type]||0)+1;co[d.ship_type]=(co[d.ship_type]||0)+(d.co2_total_t||0)});
+  const te=Object.entries(by).sort((a,b)=>b[1]-a[1]), ce=Object.entries(co).sort((a,b)=>b[1]-a[1]);
+  const opt={indexAxis:"y",maintainAspectRatio:false,responsive:true,animation:{duration:200},plugins:{legend:{display:false}},
+    scales:{x:{ticks:{color:"#8aa0b4"},grid:{color:"#24384a"}},y:{ticks:{color:"#cfd8e3",autoSkip:false,font:{size:11}},grid:{display:false}}}};
+  Object.values(CH).forEach(c=>c.destroy());
+  CH.t=new Chart($("cType"),{type:"bar",data:{labels:te.map(e=>e[0]),datasets:[{data:te.map(e=>e[1]),backgroundColor:"#21a0a0"}]},options:opt});
+  CH.c=new Chart($("cGrade"),{type:"bar",data:{labels:ce.map(e=>e[0]),datasets:[{data:ce.map(e=>+(e[1]/1e6).toFixed(3)),backgroundColor:"#3b82f6"}]},options:opt});
+}
+
+function csv(){
+  const k=["imo","name","ship_type","dwt","dwt_size_class","efficiency_grade","flag_registry","technical_efficiency","co2_total_t","co2_per_distance_kg_nm"];
+  const q=v=>{const t=String(v??"");return /[",\n]/.test(t)?'"'+t.replace(/"/g,'""')+'"':t};
+  const txt=[k.join(",")].concat(view.map(d=>k.map(x=>q(d[x])).join(","))).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+txt],{type:"text/csv"}));a.download="vessel_explorer_eu_mrv_2025.csv";a.click();
 }
 
 fetch("data.json").then(r=>r.json()).then(d=>{
   DATA=d;
-  buildCards(); charts();
+  if(typeof Chart!=="undefined")Chart.defaults.locale="en-GB";
   fillSelect("fType","ship_type","All types");
   fillSelect("fSize","dwt_size_class","All sizes");
   fillSelect("fGrade","efficiency_grade","All grades");
@@ -200,6 +205,7 @@ fetch("data.json").then(r=>r.json()).then(d=>{
     const k=th.dataset.k; if(sortK===k)sortDir*=-1;else{sortK=k;sortDir=1;}
     sortView();render();
   });
+  $("csv").onclick=csv;
   applyFilters();
 });
 </script>
