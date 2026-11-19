@@ -191,7 +191,7 @@ function csv(){
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+txt],{type:"text/csv"}));a.download="vessel_explorer_eu_mrv_2025.csv";a.click();
 }
 
-fetch("data.json").then(r=>r.json()).then(d=>{
+fetch("data.json?v=2025-11-19").then(r=>r.json()).then(d=>{
   DATA=d;
   if(typeof Chart!=="undefined")Chart.defaults.locale="en-GB";
   fillSelect("fType","ship_type","All types");
